@@ -1,0 +1,6 @@
+[submodule "ChezScheme"]
+	path = ChezScheme
+	url = https://github.com/cisco/ChezScheme.git
+[submodule "ossp-uuid"]
+	path = ossp-uuid
+	url = https://github.com/sean-/ossp-uuid.git
