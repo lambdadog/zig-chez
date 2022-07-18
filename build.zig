@@ -177,7 +177,7 @@ pub const BuildChezStep = struct {
 
         try switch (target.os.tag) {
             .linux => switch (target.cpu.arch) {
-                .i386 => result.writer().print("ta3le", .{}),
+                .i386 => result.writer().print("ti3le", .{}),
                 .x86_64 => result.writer().print("ta6le", .{}),
                 else => return error.BuildChezUnsupportedArch,
             },
