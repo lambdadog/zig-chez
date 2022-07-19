@@ -27,6 +27,7 @@ build_uuid () {
     PATH="$PWD/fakepath:$PATH" ./configure --disable-shared --enable-static --disable-libtool-lock
     PATH="$PWD/fakepath:$PATH" "${gnumake}" libuuid.la
     cp --force uuid.h include/ossp/uuid.h
+    cp .libs/libuuid.a "${build_dir}/out"
     cd "${build_dir}"
 }
 
@@ -46,7 +47,8 @@ build_chez () {
 	AR="zig ar" \
 	RANLIB="zig ranlib" \
 	../boot/${cheztarget}/kernel.o
-    cd ${build_dir}
+    cp ../boot/${cheztarget}/kernel.o "${build_dir}/out"
+    cd "${build_dir}"
 }
 
 build_uuid

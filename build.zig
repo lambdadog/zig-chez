@@ -17,6 +17,7 @@ pub fn build(b: *std.build.Builder) !void {
 
 pub const BuildChezError = error{
     BuildChezNoGNUMake,
+    BuildChezUnknownBuildError,
 };
 
 pub const BuildChezTargetError = error{
@@ -58,12 +59,12 @@ pub const BuildChezStep = struct {
         self.target = target;
     }
 
-    pub fn staticLink(self: *BuildChezStep, b: *zbs.Builder) void {
-        b.addStaticLibrarySource("ossp-uuid", zbs.FileSource{
-            .generated = self.uuidLib,
+    pub fn staticLinkTo(self: *BuildChezStep, b: *zbs.LibExeObjStep) void {
+        b.addObjectFileSource(zbs.FileSource{
+            .generated = &self.uuidLib,
         });
         b.addObjectFileSource(zbs.FileSource{
-            .generated = self.chezObj,
+            .generated = &self.chezObj,
         });
     }
 
@@ -100,6 +101,34 @@ pub const BuildChezStep = struct {
         const self = @fieldParentPtr(BuildChezStep, "step", step);
         const ally = self.builder.allocator;
 
+        const triple = try self.target.zigTriple(ally);
+        const chez_target = try self.chezTarget(ally);
+
+        const build_path = try fs.path.join(ally, &[_][]const u8{ self.builder.cache_root, "chez", triple });
+        var repo_dir = try fs.cwd().openDir(fs.path.dirname(@src().file).?, .{});
+        defer repo_dir.close();
+        var root_dir = try fs.cwd().openDir(self.builder.build_root, .{});
+        defer root_dir.close();
+        var build_dir = try root_dir.makeOpenPath(build_path, .{});
+        defer build_dir.close();
+        var out_dir = try build_dir.makeOpenPath("out", .{});
+        defer out_dir.close();
+
+        // Short circuit and don't rebuild if we've already built
+        if ((try fileExists(out_dir, "libuuid.a")) and (try fileExists(out_dir, "kernel.o"))) {
+            self.chezObj.path = try fs.path.join(ally, &[_][]const u8{
+                build_path,
+                "out",
+                "kernel.o",
+            });
+            self.uuidLib.path = try fs.path.join(ally, &[_][]const u8{
+                build_path,
+                "out",
+                "libuuid.a",
+            });
+            return;
+        }
+
         const gnu_make = try self.builder.findProgram(&.{ "gmake", "make" }, &.{});
         if (!mem.startsWith(
             u8,
@@ -112,16 +141,6 @@ pub const BuildChezStep = struct {
         )) {
             return error.BuildChezNoGNUMake;
         }
-
-        const triple = try self.target.zigTriple(ally);
-        const chez_target = try self.chezTarget(ally);
-
-        const build_path = try fs.path.join(ally, &[_][]const u8{ self.builder.cache_root, "chez", triple });
-        var repo_dir = try fs.cwd().openDir(fs.path.dirname(@src().file).?, .{});
-        defer repo_dir.close();
-        var root_dir = try fs.cwd().openDir(self.builder.build_root, .{});
-        defer root_dir.close();
-        var build_dir = try root_dir.makeOpenPath(build_path, .{});
 
         try build_dir.setAsCwd();
         _ = try self.builder.exec(
@@ -153,20 +172,21 @@ pub const BuildChezStep = struct {
             },
         );
 
-        self.chezObj.path = try fs.path.join(ally, &[_][]const u8{
-            build_path,
-            "ChezScheme",
-            chez_target,
-            "boot",
-            chez_target,
-            "kernel.o",
-        });
-        self.uuidLib.path = try fs.path.join(ally, &[_][]const u8{
-            build_path,
-            "ossp-uuid",
-            ".libs",
-            "libuuid.a",
-        });
+        if ((try fileExists(out_dir, "libuuid.a")) and (try fileExists(out_dir, "kernel.o"))) {
+            self.chezObj.path = try fs.path.join(ally, &[_][]const u8{
+                build_path,
+                "out",
+                "kernel.o",
+            });
+            self.uuidLib.path = try fs.path.join(ally, &[_][]const u8{
+                build_path,
+                "out",
+                "libuuid.a",
+            });
+            return;
+        } else {
+            return error.BuildChezUnknownBuildError;
+        }
     }
 
     fn chezTarget(self: *BuildChezStep, ally: mem.Allocator) ![]u8 {
@@ -194,4 +214,9 @@ fn oom() noreturn {
 
 fn getSubmodulePath(comptime name: []const u8) []const u8 {
     return fs.path.dirname(@src().file).? ++ fs.path.sep_str ++ name;
+}
+
+fn fileExists(dir: fs.Dir, sub_path: []const u8) !bool {
+    dir.access(sub_path, .{}) catch return false;
+    return true;
 }
