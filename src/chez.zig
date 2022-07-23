@@ -1,197 +1,196 @@
 const std = @import("std");
 const ally = std.heap.c_allocator;
 
-// Excluded:
-// extern "c" fn Sscheme_script([*c]const u8, c_int, [*c][*c]const u8) c_int;
-// extern "c" fn Sscheme_program([*c]const u8, c_int, [*c][*c]const u8) c_int;
-
-pub fn init(cb: ?fn () callconv(.C) void) void {
-    Sscheme_init(cb);
-}
-extern "c" fn Sscheme_init(?fn () callconv(.C) void) void;
-
-pub fn setVerbose(v: bool) void {
-    Sset_verbose(@as(c_int, @boolToInt(v)));
-}
-extern "c" fn Sset_verbose(c_int) void;
-
-pub fn registerBootFile(path: []const u8) void {
-    Sregister_boot_file(path.ptr);
-}
-extern "c" fn Sregister_boot_file([*]const u8) void;
-
-pub fn registerHeapFile(path: []const u8) void {
-    Sregister_heap_file(&path);
-}
-extern "c" fn Sregister_heap_file([*]const u8) void;
-
-/// Build the scheme heap, must be done before calling into scheme.
-pub fn buildHeap(name: ?[]const u8, cb: ?fn () callconv(.C) void) void {
-    if (name) |n| {
-        Sbuild_heap(n.ptr, cb);
-    } else {
-        Sbuild_heap(@intToPtr([*c]const u8, 0), cb);
-    }
-}
-extern "c" fn Sbuild_heap([*c]const u8, ?fn () callconv(.C) void) void;
-
-/// Enable the scheme expression editor, optionally passing the path
-/// to a history file.
-pub fn enableExpeditor(history_file: ?[]const u8) void {
-    if (history_file) |h_file| {
-        Senable_expeditor(h_file.ptr);
-    } else {
-        Senable_expeditor(@intToPtr([*c]const u8, 0));
-    }
-}
-extern "c" fn Senable_expeditor([*c]const u8) void;
-
-/// Run start sequence. Takes `std.os.argv` rather than argc/argv pair
-/// like in C api -- if you wish to use this on Windows then I suupose
-/// you'll have to convert it somehow.
-pub fn start(argv: ?[][*]u8) void {
-    if (argv) |av| {
-        _ = Sscheme_start(@truncate(c_int, @as(i128, av.len)), av.ptr);
-    } else {
-        _ = Sscheme_start(0, @intToPtr([*c][*]const u8, 0));
-    }
-}
-extern "c" fn Sscheme_start(c_int, [*c][*]const u8) c_int;
-
-/// De-init
-pub fn deinit() void {
-    Sscheme_deinit();
-}
-extern "c" fn Sscheme_deinit() void;
-
-pub fn kernelVersion() []const u8 {
-    return std.mem.sliceTo(Skernel_version(), 0);
-}
-extern "c" fn Skernel_version() [*c]const u8;
-
-// This suffices as long as portable bytecode isn't in Chez
+// Works for everything but portable bytecode, but portable bytecode
+// isn't actually in chez yet.
 const native_endian = @import("builtin").target.cpu.arch.endian();
-const Type = std.builtin.Type;
-const Signedness = std.builtin.Signedness;
 
-/// A scheme value
-pub const SCM = opaque {
-    /// Scheme value for nil
-    pub const Snil = @intToPtr(*SCM, 0x26);
+pub const C = struct {
+    // i believe:
+    // iptr = isize
+    // uptr = usize
+    // scheme.h uses iptr and uptr because (u)intptr_t isn't available on all platforms
 
-    /// Scheme value for true
-    pub const Strue = @intToPtr(*SCM, 0xE);
+    // NEW
 
-    /// Scheme value for false
-    pub const Sfalse = @intToPtr(*SCM, 0x6);
+    // Customization
+    pub extern "c" fn Skernel_version() [*:0]const u8;
+    pub extern "c" fn Sscheme_init(?fn () callconv(.C) void) void;
+    pub extern "c" fn Sset_verbose(c_int) void;
+    pub extern "c" fn Sregister_boot_file([*]const u8) void;
+    pub extern "c" fn Sregister_boot_file_fd([*]const u8, c_int) void;
+    pub extern "c" fn build_heap([*c]const u8, ?fn () callconv(.C) void) void;
+    pub extern "c" fn Senable_expeditor([*c]const u8) void;
+    pub extern "c" fn Sretain_static_relocation() void;
+    pub extern "c" fn Sscheme_start(c_int, [*c][*]const u8) c_int;
+    pub extern "c" fn Sscheme_script([*]const u8, c_int, [*c][*]const u8) c_int;
+    pub extern "c" fn Sscheme_program([*]const u8, c_int, [*c][*]const u8) c_int;
+    pub extern "c" fn compact_heap() void;
+    pub extern "c" fn Sscheme_deinit() void;
 
-    /// Scheme value for a broken weak pointer object
-    /// http://cisco.github.io/ChezScheme/csug9.5/smgmt.html#./smgmt:s21
-    pub const Sbwp = @intToPtr(*SCM, 0x4E);
+    // Predicates
+    // pub inline fn Sfixnump(scm: *SCM) bool {}
+    // pub inline fn Scharp(scm: *SCM) bool {}
+    // pub inline fn Snullp(scm: *SCM) bool {}
+    // pub inline fn Seof_objectp(scm: *SCM) bool {}
+    // pub inline fn Sbwp_objectp(scm: *SCM) bool {}
+    // pub inline fn Sbooleanp(scm: *SCM) bool {}
+    // pub inline fn Spairp(scm: *SCM) bool {}
+    // pub inline fn Ssymbolp(scm: *SCM) bool {}
+    // pub inline fn Sprocedurep(scm: *SCM) bool {}
+    // pub inline fn Sflonump(scm: *SCM) bool {}
+    // pub inline fn Svectorp(scm: *SCM) bool {}
+    // pub inline fn Sbytevectorp(scm: *SCM) bool {}
+    // pub inline fn Sfxvectorp(scm: *SCM) bool {}
+    // pub inline fn Sstringp(scm: *SCM) bool {}
+    // pub inline fn Sbignump(scm: *SCM) bool {}
+    // pub inline fn Sboxp(scm: *SCM) bool {}
+    // pub inline fn Sinexactnump(scm: *SCM) bool {}
+    // pub inline fn Sp(scm: *SCM) bool {}
+    // pub inline fn Sxactnump(scm: *SCM) bool {}
+    // pub inline fn Sratnump(scm: *SCM) bool {}
+    // pub inline fn Sinputportp(scm: *SCM) bool {}
+    // pub inline fn Soutputportp(scm: *SCM) bool {}
+    // pub inline fn Srecordp(scm: *SCM) bool {}
 
-    /// Scheme value for an end-of-file (eof) object
-    pub const Seof = @intToPtr(*SCM, 0x36);
-
-    /// Scheme value for void
-    pub const Svoid = @intToPtr(*SCM, 0x3E);
-
-    /// Constructs a cons cell
-    pub extern "c" fn Scons(*SCM, *SCM) *SCM;
-
-    /// Constructs a box
-    pub extern "c" fn Sbox(*SCM) *SCM;
-
-    /// Constructs a scheme value from a string
-    ///
-    /// Zig strings are UTF-8 encoded by default so this uses
-    /// Sstring_utf8 internally. `fromStringASCII` may have better
-    /// performance, but doesn't validate that your input is actually
-    /// ASCII.
-    pub fn fromString(str: []const u8) *SCM {
-        // We have to utf8 decode this to get the length, hopefully
-        // it's not too slow...
-        return Sstring_utf8(str.ptr, @as(c_long, std.unicode.utf8Decode(str).len));
+    // Accessors
+    // pub inline fn Sfixnum_value(scm: *SCM) isize {}
+    // pub inline fn Schar_value(scm: *SCM) usize {}
+    pub inline fn Sboolean_value(scm: *SCM) bool {
+        scm != Sfalse;
     }
-    extern "c" fn Sstring_utf8([*]const u8, c_long) *SCM;
-
-    /// Constructs a scheme value from an ASCII string. Doesn't
-    /// validate your input.
-    ///
-    /// See 'fromString' for a UTF-8 version.
-    pub fn fromStringASCII(str: []const u8) *SCM {
-        return Sstring_of_length(str.ptr, @as(c_long, str.len));
+    // inline fn Sflonum_value(scm: *SCM) f64 {}
+    pub extern "c" fn Sinteger_value(*SCM) isize;
+    pub inline fn Sunsigned_value(scm: *SCM) usize {
+        return @bitCast(usize, Sinteger_value(scm));
     }
-    extern "c" fn Sstring_of_length([*]const u8, c_long) *SCM;
-
-    /// Constructs a scheme value from a float
-    pub fn fromFlonum(val: f64) *SCM {
-        return Sflonum(val);
+    pub extern "c" fn Sinteger32_value(*SCM) c_int;
+    pub inline fn Sunsigned32_value(scm: *SCM) c_uint {
+        return @bitCast(c_uint, Sinteger32_value(scm));
     }
-    extern "c" fn Sflonum(f64) *SCM;
+    pub extern "c" fn Sinteger64_value(*SCM) c_long;
+    pub inline fn Sunsigned64_value(scm: *SCM) c_ulong {
+        return @bitCast(c_ulong, Sinteger64_value(scm));
+    }
+    // pub inline fn Scar(scm: *SCM) *SCM {}
+    // pub inline fn Scdr(scm: *SCM) *SCM {}
+    pub extern "c" fn Ssymbol_to_string(*SCM) *SCM;
+    // pub inline fn Sunbox(scm: *SCM) *SCM {}
+    // pub inline fn Sstring_length(scm: *SCM) isize {}
+    // pub inline fn Svector_length(scm: *SCM) isize {}
+    // pub inline fn Sbytevector_length(scm: *SCM) isize {}
+    // pub inline fn Sfxvector_length(scm: *SCM) isize {}
+    // pub inline fn Sstring_ref(scm: *SCM, index: isize) u8 {}
+    // pub inline fn Svector_ref(scm: *SCM, index: isize) *SCM {}
+    // pub inline fn Sbytevector_u8_ref(scm: *SCM, index: isize) u8 {}
+    // pub inline fn Sfxvector_ref(scm: *SCM, index: isize) *SCM {}
+    // pub inline fn Sbytevector_data(scm: *SCM) [*:0]u8 {}
 
-    /// Constructs a scheme value from a boolean
-    pub fn fromBool(val: bool) *SCM {
-        if (val) {
-            return SCM.t;
+    // Mutators
+    pub extern "c" fn Sset_box(*SCM, *SCM) void;
+    pub extern "c" fn Sset_car(*SCM, *SCM) void;
+    pub extern "c" fn Sset_cdr(*SCM, *SCM) void;
+    // inline fn Sstring_set(scm: *SCM, index: isize, char: u8) void {}
+    pub extern "c" fn Svector_set(*SCM, isize, *SCM) void;
+    // inline fn Sbytevector_u8_set(scm: *SCM, index: isize, val: u8) void {}
+    // inline fn Sfxvector_set(scm: *SCM, index: isize, val: *SCM) void {}
+
+    // Constructors
+    pub const Snil = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x26)));
+    pub const Strue = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0xE)));
+    pub const Sfalse = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x6)));
+    pub const Sbwp_object = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x4E)));
+    pub const Seof_object = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x36)));
+    pub const Svoid = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x3E)));
+    pub inline fn Sfixnum(val: isize) *SCM {
+        return switch (comptime native_endian) {
+            .Big => @intToPtr(*SCM, @bitCast(usize, val * 8)),
+            .Little => @intToPtr(*SCM, @bitCast(usize, val * 4)),
+        };
+    }
+    pub inline fn Schar(val: u8) *SCM {
+        return @intToPtr(*SCM, @bitCast(usize, (x << @as(c_int, 8)) | @as(c_int, 0x16)));
+    }
+    pub inline fn Sboolean(val: bool) *SCM {
+        return if (val) {
+            Strue;
         } else {
-            return SCM.f;
-        }
+            Sfalse;
+        };
     }
+    pub extern "c" fn Sflonum(f64) *SCM;
+    pub extern "c" fn Sstring([*]const u8) *SCM;
+    pub extern "c" fn Sstring_of_length([*]const u8, isize) *SCM;
+    pub extern "c" fn Sstring_utf8([*]const u8, isize) *SCM;
+    pub extern "c" fn Sinteger(isize) *SCM;
+    pub extern "c" fn Sunsigned(usize) *SCM;
+    pub extern "c" fn Sinteger32(c_int) *SCM;
+    pub extern "c" fn Sunsigned32(c_uint) *SCM;
+    pub extern "c" fn Sinteger64(c_long) *SCM;
+    pub extern "c" fn Sunsigned64(c_ulong) *SCM;
+    pub extern "c" fn Scons(*SCM, *SCM) *SCM;
+    pub extern "c" fn Sbox(*SCM) *SCM;
+    pub extern "c" fn Sstring_to_symbol([*]const u8) *SCM;
+    pub extern "c" fn Smake_string(isize, c_int) *SCM;
+    pub extern "c" fn Smake_vector(isize, *SCM) *SCM;
+    pub extern "c" fn Smake_bytevector(isize, c_int) *SCM;
+    pub extern "c" fn Smake_fxvector(isize, *SCM) *SCM;
+    pub extern "c" fn Smake_uninitialized_string(isize) *SCM;
 
-    /// Constructs a scheme value from a char
-    pub fn fromChar(c: u8) *SCM {
-        // I honestly don't know how this works, I just copied it.
-        return @as(*SCM, @as(c_longlong, c << 8 | 0x16));
-    }
+    // Windows-specific helper functions
+    // I have no intention of implementing these
 
-    // https://man.scheme.org/fixnum-width.3scheme
-    /// Constructs a scheme value from a fixnum
-    pub fn fromFixnum(val: @Type(Type.Int{
-        .signedness = Signedness.signed,
-        .bits = switch (native_endian) {
-            .Big => 61,
-            .Little => 30,
-        },
-    })) *SCM {
-        switch (native_endian) {
-            .Big => @as(*SCM, @as(c_longlong, val * 8)),
-            .Little => @as(*SCM, @as(c_longlong, val * 4)),
-        }
-    }
+    // Accessing top-level values
+    pub extern "c" fn Stop_level_value(*SCM) *SCM;
+    pub extern "c" fn Sset_top_level_value(*SCM, *SCM) void;
 
-    /// Constructs a scheme value from an integer
-    pub fn fromInteger(val: isize) *SCM {
-        return Sinteger(@as(c_long, val));
-    }
-    extern "c" fn Sinteger(c_long) *SCM;
+    // Locking Scheme objects
+    pub extern "c" fn Slock_object(*SCM) void;
+    pub extern "c" fn Sunlock_object(*SCM) void;
+    pub extern "c" fn Slocked_objectp(*SCM) bool;
 
-    /// Constructs a scheme value from an unsigned integer
-    pub fn fromUnsigned(val: usize) *SCM {
-        return Sunsigned(@as(c_ulong, val));
-    }
-    extern "c" fn Sunsigned(c_ulong) *SCM;
+    // Registering foreign entry points
+    pub extern "c" fn Sforeign_symbol([*]const u8, *anyopaque) void;
+    pub extern "c" fn Sregister_symbol([*]const u8, *anyopaque) void;
 
-    /// Constructs a scheme value from a 32 bit integer
-    pub fn fromInteger32(val: i32) *SCM {
-        return Sinteger32(@as(c_int, val));
-    }
-    extern "c" fn Sinteger32(c_int) *SCM;
+    // Obtaining Scheme entry points
+    // pub inline fn Sforeign_callable_entry_point(scm: *SCM) *anyopaque {}
+    // pub inline fn Sforeign_callable_code_object(fun: *anyopaque) *SCM {}
 
-    /// Constructs a scheme value from a 32 bit unsigned integer
-    pub fn fromUnsigned32(val: u32) *SCM {
-        return Sunsigned32(@as(c_uint, val));
-    }
-    extern "c" fn Sunsigned32(c_uint) *SCM;
+    // Low-level support for calls into Scheme
+    pub extern "c" fn Scall0(*SCM) *SCM;
+    pub extern "c" fn Scall1(*SCM, *SCM) *SCM;
+    pub extern "c" fn Scall2(*SCM, *SCM, *SCM) *SCM;
+    pub extern "c" fn Scall3(*SCM, *SCM, *SCM, *SCM) *SCM;
+    pub extern "c" fn Sinitframe(isize) void;
+    pub extern "c" fn Sput_arg(isize, *SCM) void;
+    pub extern "c" fn Scall(*SCM, isize) *SCM;
 
-    /// Constructs a scheme value from a 64 bit integer
-    pub fn fromInteger64(val: i64) *SCM {
-        return Sinteger65(@as(c_longlong, val));
-    }
-    extern "c" fn Sinteger65(c_longlong) *SCM;
+    // Activating, deactivating, and destroying threads
+    pub extern "c" fn Sactivate_thread() bool;
+    pub extern "c" fn Sdeactivate_thread() void;
+    pub extern "c" fn Sdestroy_thread() bool;
 
-    /// Constructs a scheme value from a 64 bit unsigned integer
-    pub fn fromUnsigned64(val: u64) *SCM {
-        return Sunsigned64(@as(c_ulonglong, val));
-    }
-    extern "c" fn Sunsigned64(c_ulonglong) *SCM;
+    // Low-level synchronization primitives
+    // pub inline fn INITLOCK(addr: *anyopaque) void {}
+    // pub inline fn SPINLOCK(addr: *anyopaque) void {}
+    // pub inline fn UNLOCK(addr: *anyopaque) void {}
+    // pub inline fn LOCKED_INCR(addr: *anyopaque, ret: *c_int) void {}
+    // pub inline fn LOCKED_DECR(addr: *anyopaque, ret: *c_int) void {}
+
+    // Undocumented
+    pub extern "c" fn Ssave_heap([*c]const u8, c_int) void;
+    pub extern "c" fn Sregister_heap_file([*]const u8) void;
 };
+
+pub const SCM = opaque {};
+
+// untested
+pub inline fn call(len: comptime_int, procedure: *SCM, args: *[len]SCM) *SCM {
+    C.Sinitframe(len);
+    comptime var i = 0;
+    inline while (i < len) : (i += 1) {
+        C.Sput_arg(i + 1, args[i]);
+    }
+    C.Scall(procedure, len);
+}
