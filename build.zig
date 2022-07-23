@@ -7,12 +7,22 @@ const CrossTarget = std.zig.CrossTarget;
 
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
+    const mode = b.standardReleaseOptions();
 
     const build_chez = BuildChezStep.create(b);
-    try build_chez.setTarget(target);
+    build_chez.setTarget(target);
 
-    const test_step = b.step("test", "Test building Chez");
-    test_step.dependOn(&build_chez.step);
+    const chez_tests = b.addTest("src/chez.zig");
+    chez_tests.setBuildMode(mode);
+    chez_tests.step.dependOn(&build_chez.step);
+
+    chez_tests.addIncludeDir("./zig-cache/chez/native/out/");
+
+    chez_tests.linkLibC();
+    build_chez.staticLinkTo(chez_tests);
+
+    const test_step = b.step("test", "Run library tests");
+    test_step.dependOn(&chez_tests.step);
 }
 
 pub const BuildChezError = error{
@@ -55,7 +65,7 @@ pub const BuildChezStep = struct {
     //
     // Helped by https://github.com/cisco/ChezScheme/issues/646,
     // but not essential.
-    pub fn setTarget(self: *BuildChezStep, target: CrossTarget) BuildChezTargetError!void {
+    pub fn setTarget(self: *BuildChezStep, target: CrossTarget) void {
         self.target = target;
     }
 

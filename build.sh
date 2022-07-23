@@ -48,6 +48,9 @@ build_chez () {
 	RANLIB="zig ranlib" \
 	../boot/${cheztarget}/kernel.o
     cp ../boot/${cheztarget}/kernel.o "${build_dir}/out"
+    cp ../boot/${cheztarget}/petite.boot "${build_dir}/out"
+    cp ../boot/${cheztarget}/scheme.boot "${build_dir}/out"
+    cp ../boot/${cheztarget}/scheme.h "${build_dir}/out"
     cd "${build_dir}"
 }
 

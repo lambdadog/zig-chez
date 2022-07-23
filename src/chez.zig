@@ -1,17 +1,36 @@
 const std = @import("std");
 const ally = std.heap.c_allocator;
 
+const scheme_h = switch (@import("builtin").is_test) {
+    true => @cImport({
+        @cDefine("SCHEME_STATIC", "1");
+        @cInclude("scheme.h");
+    }),
+    false => {},
+};
+
+test {
+    // Initialize scheme kernel
+    C.Sscheme_init(null);
+    defer C.Sscheme_deinit();
+
+    // TODO: find a way to make this cleaner -- I'd like to
+    // provide {petite,scheme}.boot from build.zig somehow...
+    C.Sregister_boot_file("./zig-cache/chez/native/out/petite.boot");
+    C.Sregister_boot_file("./zig-cache/chez/native/out/scheme.boot");
+    C.Sbuild_heap("test", null);
+
+    _ = C;
+}
+
 // Works for everything but portable bytecode, but portable bytecode
 // isn't actually in chez yet.
 const native_endian = @import("builtin").target.cpu.arch.endian();
 
 pub const C = struct {
-    // i believe:
     // iptr = isize
     // uptr = usize
     // scheme.h uses iptr and uptr because (u)intptr_t isn't available on all platforms
-
-    // NEW
 
     // Customization
     pub extern "c" fn Skernel_version() [*:0]const u8;
@@ -19,7 +38,7 @@ pub const C = struct {
     pub extern "c" fn Sset_verbose(c_int) void;
     pub extern "c" fn Sregister_boot_file([*]const u8) void;
     pub extern "c" fn Sregister_boot_file_fd([*]const u8, c_int) void;
-    pub extern "c" fn build_heap([*c]const u8, ?fn () callconv(.C) void) void;
+    pub extern "c" fn Sbuild_heap([*c]const u8, ?fn () callconv(.C) void) void;
     pub extern "c" fn Senable_expeditor([*c]const u8) void;
     pub extern "c" fn Sretain_static_relocation() void;
     pub extern "c" fn Sscheme_start(c_int, [*c][*]const u8) c_int;
@@ -57,7 +76,7 @@ pub const C = struct {
     // pub inline fn Sfixnum_value(scm: *SCM) isize {}
     // pub inline fn Schar_value(scm: *SCM) usize {}
     pub inline fn Sboolean_value(scm: *SCM) bool {
-        scm != Sfalse;
+        return scm != Sfalse;
     }
     // inline fn Sflonum_value(scm: *SCM) f64 {}
     pub extern "c" fn Sinteger_value(*SCM) isize;
@@ -86,6 +105,10 @@ pub const C = struct {
     // pub inline fn Sfxvector_ref(scm: *SCM, index: isize) *SCM {}
     // pub inline fn Sbytevector_data(scm: *SCM) [*:0]u8 {}
 
+    test "accessors" {
+        try std.testing.expect(C.Sboolean_value(C.Strue) == true);
+    }
+
     // Mutators
     pub extern "c" fn Sset_box(*SCM, *SCM) void;
     pub extern "c" fn Sset_car(*SCM, *SCM) void;
@@ -96,20 +119,20 @@ pub const C = struct {
     // inline fn Sfxvector_set(scm: *SCM, index: isize, val: *SCM) void {}
 
     // Constructors
-    pub const Snil = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x26)));
-    pub const Strue = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0xE)));
-    pub const Sfalse = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x6)));
-    pub const Sbwp_object = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x4E)));
-    pub const Seof_object = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x36)));
-    pub const Svoid = @intToPtr(*SCM, @bitCast(usize, @as(c_int, 0x3E)));
+    pub const Snil = @intToPtr(*SCM, 0x26);
+    pub const Strue = @intToPtr(*SCM, 0xE);
+    pub const Sfalse = @intToPtr(*SCM, 0x6);
+    pub const Sbwp_object = @intToPtr(*SCM, 0x4E);
+    pub const Seof_object = @intToPtr(*SCM, 0x36);
+    pub const Svoid = @intToPtr(*SCM, 0x3E);
     pub inline fn Sfixnum(val: isize) *SCM {
         return switch (comptime native_endian) {
-            .Big => @intToPtr(*SCM, @bitCast(usize, val * 8)),
-            .Little => @intToPtr(*SCM, @bitCast(usize, val * 4)),
+            .Little => @intToPtr(*SCM, @bitCast(usize, val * 8)),
+            .Big => @intToPtr(*SCM, @bitCast(usize, val * 4)),
         };
     }
     pub inline fn Schar(val: u8) *SCM {
-        return @intToPtr(*SCM, @bitCast(usize, (x << @as(c_int, 8)) | @as(c_int, 0x16)));
+        return @intToPtr(*SCM, @intCast(usize, val) << 8 | 0x16);
     }
     pub inline fn Sboolean(val: bool) *SCM {
         return if (val) {
@@ -136,6 +159,17 @@ pub const C = struct {
     pub extern "c" fn Smake_bytevector(isize, c_int) *SCM;
     pub extern "c" fn Smake_fxvector(isize, *SCM) *SCM;
     pub extern "c" fn Smake_uninitialized_string(isize) *SCM;
+
+    test "constructors" {
+        try std.testing.expect(@ptrToInt(scheme_h.Snil.?) == @ptrToInt(C.Snil));
+        try std.testing.expect(@ptrToInt(scheme_h.Strue.?) == @ptrToInt(C.Strue));
+        try std.testing.expect(@ptrToInt(scheme_h.Sfalse.?) == @ptrToInt(C.Sfalse));
+        try std.testing.expect(@ptrToInt(scheme_h.Sbwp_object.?) == @ptrToInt(C.Sbwp_object));
+        try std.testing.expect(@ptrToInt(scheme_h.Seof_object.?) == @ptrToInt(C.Seof_object));
+        try std.testing.expect(@ptrToInt(scheme_h.Svoid.?) == @ptrToInt(C.Svoid));
+        try std.testing.expect(@ptrToInt(scheme_h.Schar('c').?) == @ptrToInt(C.Schar('c')));
+        try std.testing.expect(@ptrToInt(scheme_h.Sfixnum(25).?) == @ptrToInt(C.Sfixnum(25)));
+    }
 
     // Windows-specific helper functions
     // I have no intention of implementing these
@@ -172,11 +206,16 @@ pub const C = struct {
     pub extern "c" fn Sdestroy_thread() bool;
 
     // Low-level synchronization primitives
-    // pub inline fn INITLOCK(addr: *anyopaque) void {}
-    // pub inline fn SPINLOCK(addr: *anyopaque) void {}
-    // pub inline fn UNLOCK(addr: *anyopaque) void {}
-    // pub inline fn LOCKED_INCR(addr: *anyopaque, ret: *c_int) void {}
-    // pub inline fn LOCKED_DECR(addr: *anyopaque, ret: *c_int) void {}
+    // pub usingnamespace switch (chez_threaded) {
+    //   true => struct {
+    //     pub inline fn INITLOCK(addr: *anyopaque) void {}
+    //     pub inline fn SPINLOCK(addr: *anyopaque) void {}
+    //     pub inline fn UNLOCK(addr: *anyopaque) void {}
+    //     pub inline fn LOCKED_INCR(addr: *anyopaque, ret: *c_int) void {}
+    //     pub inline fn LOCKED_DECR(addr: *anyopaque, ret: *c_int) void {}
+    //   },
+    //   false => {},
+    // };
 
     // Undocumented
     pub extern "c" fn Ssave_heap([*c]const u8, c_int) void;
