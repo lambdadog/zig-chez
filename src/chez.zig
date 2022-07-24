@@ -403,7 +403,7 @@ pub inline fn call(comptime len: comptime_int, procedure: *SCM, args: [len]*SCM)
     return C.Scall(procedure, len);
 }
 
-test "zig call implementation" {
+test "call()" {
     const result = call(1, C.Stop_level_value(C.Sstring_to_symbol("not")), .{C.Sfalse});
     try std.testing.expect(result == C.Strue);
 }
