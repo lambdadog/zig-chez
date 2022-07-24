@@ -313,8 +313,37 @@ pub const C = struct {
     pub extern "c" fn Sregister_symbol([*]const u8, *anyopaque) void;
 
     // Obtaining Scheme entry points
-    // pub inline fn Sforeign_callable_entry_point(scm: *SCM) *anyopaque {}
-    // pub inline fn Sforeign_callable_code_object(fun: *anyopaque) *SCM {}
+    pub inline fn Sforeign_callable_entry_point(scm: *SCM) *anyopaque {
+        return switch (comptime bit_width) {
+            64 => @intToPtr(*anyopaque, @ptrToInt(scm) + 65),
+            32 => @intToPtr(*anyopaque, @ptrToInt(scm) + 33),
+            else => unreachable,
+        };
+    }
+    pub inline fn Sforeign_callable_code_object(fun: *const anyopaque) *SCM {
+        return switch (comptime bit_width) {
+            64 => @intToPtr(*SCM, @ptrToInt(fun) - 65),
+            32 => @intToPtr(*SCM, @ptrToInt(fun) - 33),
+            else => unreachable,
+        };
+    }
+
+    test "scheme entry points" {
+        const sexpr = "(foreign-callable (lambda (x) (not x)) (scheme-object) scheme-object)";
+        const ois = C.Stop_level_value(C.Sstring_to_symbol("open-input-string"));
+        const sip = C.Scall1(ois, C.Sstring_of_length(sexpr, sexpr.len));
+        const read = C.Stop_level_value(C.Sstring_to_symbol("read"));
+        const expr = C.Scall1(read, sip);
+        const eval = C.Stop_level_value(C.Sstring_to_symbol("eval"));
+        const scm_not = C.Scall1(eval, expr);
+
+        Slock_object(scm_not);
+        defer Sunlock_object(scm_not);
+
+        const not_through_scm = @ptrCast(fn (*SCM) *SCM, Sforeign_callable_entry_point(scm_not));
+        try std.testing.expect(not_through_scm(C.Sfalse) == C.Strue);
+        try std.testing.expect(C.Sforeign_callable_code_object(not_through_scm) == scm_not);
+    }
 
     // Low-level support for calls into Scheme
     pub extern "c" fn Scall0(*SCM) *SCM;
