@@ -1,6 +1,8 @@
 const std = @import("std");
 const ally = std.heap.c_allocator;
 
+// FIXME: will cause import fail errors with running tests for
+// applications/libraries depending on zig-chez
 const h = switch (@import("builtin").is_test) {
     true => @cImport({
         @cDefine("SCHEME_STATIC", "1");
