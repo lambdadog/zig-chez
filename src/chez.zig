@@ -205,14 +205,26 @@ pub const C = struct {
     pub extern "c" fn Sset_car(*SCM, *SCM) void;
     pub extern "c" fn Sset_cdr(*SCM, *SCM) void;
     inline fn Sstring_set(scm: *SCM, index: isize, char: u8) void {
-        @intToPtr([*]c_uint, @ptrToInt(scm) + 9)[@intCast(usize, index)] = @truncate(c_uint, @intCast(usize, char) << 8 | 0x16);
+        switch (comptime bit_width) {
+            64 => @intToPtr([*]c_uint, @ptrToInt(scm) + 9)[@intCast(usize, index)] = @truncate(c_uint, @intCast(usize, char) << 8 | 0x16),
+            32 => @intToPtr([*]c_uint, @ptrToInt(scm) + 5)[@intCast(usize, index)] = @truncate(c_uint, @intCast(usize, char) << 8 | 0x16),
+            else => unreachable,
+        }
     }
     pub extern "c" fn Svector_set(*SCM, isize, *SCM) void;
     inline fn Sbytevector_u8_set(scm: *SCM, index: isize, val: u8) void {
-        @intToPtr([*]u8, @ptrToInt(scm) + 9)[@intCast(usize, index)] = val;
+        switch (comptime bit_width) {
+            64 => @intToPtr([*]u8, @ptrToInt(scm) + 9)[@intCast(usize, index)] = val,
+            32 => @intToPtr([*]u8, @ptrToInt(scm) + 5)[@intCast(usize, index)] = val,
+            else => unreachable,
+        }
     }
     inline fn Sfxvector_set(scm: *SCM, index: isize, val: *SCM) void {
-        @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)] = val;
+        switch (comptime bit_width) {
+            64 => @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)] = val,
+            32 => @intToPtr([*]*SCM, @ptrToInt(scm) + 5)[@intCast(usize, index)] = val,
+            else => unreachable,
+        }
     }
 
     test "mutators" {
