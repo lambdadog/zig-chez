@@ -393,7 +393,6 @@ pub const C = struct {
 
 pub const SCM = opaque {};
 
-// untested
 pub inline fn call(comptime len: comptime_int, procedure: *SCM, args: [len]*SCM) *SCM {
     C.Sinitframe(len);
     comptime var i = 0;
