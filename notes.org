@@ -1,0 +1,9 @@
+* Loading our bootfiles
+Set ~SCHEMEHEAPDIRS~ with ~putenv~ before running ~Sbuild_heap~
+(~putenv~ is most cross platform, and we're already linking libC so we
+probably don't need to worry about using it).
+
+It's worth noting however, re: ~putenv~, Chez uses the underlying
+Windows syscalls for their getenv reimplementation. Probably worth
+figuring out why, as we'd ideally like to maintain maximum
+compatibility with configurations chez is compatible with.
