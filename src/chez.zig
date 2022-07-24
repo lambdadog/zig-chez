@@ -180,10 +180,31 @@ pub const C = struct {
     pub extern "c" fn Sset_box(*SCM, *SCM) void;
     pub extern "c" fn Sset_car(*SCM, *SCM) void;
     pub extern "c" fn Sset_cdr(*SCM, *SCM) void;
-    // inline fn Sstring_set(scm: *SCM, index: isize, char: u8) void {}
+    inline fn Sstring_set(scm: *SCM, index: isize, char: u8) void {
+        @intToPtr([*]c_uint, @ptrToInt(scm) + 9)[@intCast(usize, index)] = @truncate(c_uint, @intCast(usize, char) << 8 | 0x16);
+    }
     pub extern "c" fn Svector_set(*SCM, isize, *SCM) void;
-    // inline fn Sbytevector_u8_set(scm: *SCM, index: isize, val: u8) void {}
-    // inline fn Sfxvector_set(scm: *SCM, index: isize, val: *SCM) void {}
+    inline fn Sbytevector_u8_set(scm: *SCM, index: isize, val: u8) void {
+        @intToPtr([*]u8, @ptrToInt(scm) + 9)[@intCast(usize, index)] = val;
+    }
+    inline fn Sfxvector_set(scm: *SCM, index: isize, val: *SCM) void {
+        @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)] = val;
+    }
+
+    test "mutators" {
+        const string: []const u8 = "Hello, vorld!";
+        const scm_string = @ptrCast(*SCM, h.Sstring_of_length(string.ptr, string.len).?);
+        C.Sstring_set(scm_string, 7, 'w');
+        try std.testing.expect(C.Sstring_ref(scm_string, 7) == 'w');
+
+        const bytevector = @ptrCast(*SCM, h.Smake_bytevector(10, 'c'));
+        C.Sbytevector_u8_set(bytevector, 5, 'h');
+        try std.testing.expect(C.Sbytevector_u8_ref(bytevector, 5) == 'h');
+
+        const fxvector = @ptrCast(*SCM, h.Smake_fxvector(10, h.Sfixnum(35).?));
+        C.Sfxvector_set(fxvector, 2, @ptrCast(*SCM, h.Strue.?));
+        try std.testing.expect(C.Sfxvector_ref(fxvector, 2) == @ptrCast(*SCM, h.Strue.?));
+    }
 
     // Constructors
     pub const Snil = @intToPtr(*SCM, 0x26);
