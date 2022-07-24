@@ -1,7 +1,7 @@
 const std = @import("std");
 const ally = std.heap.c_allocator;
 
-const scheme_h = switch (@import("builtin").is_test) {
+const h = switch (@import("builtin").is_test) {
     true => @cImport({
         @cDefine("SCHEME_STATIC", "1");
         @cInclude("scheme.h");
@@ -73,12 +73,21 @@ pub const C = struct {
     // pub inline fn Srecordp(scm: *SCM) bool {}
 
     // Accessors
-    // pub inline fn Sfixnum_value(scm: *SCM) isize {}
-    // pub inline fn Schar_value(scm: *SCM) usize {}
+    pub inline fn Sfixnum_value(scm: *SCM) isize {
+        return switch (comptime native_endian) {
+            .Little => @divExact(@bitCast(isize, @ptrToInt(scm)), 8),
+            .Big => @divExact(@bitCast(isize, @ptrToInt(scm)), 4),
+        };
+    }
+    pub inline fn Schar_value(scm: *SCM) c_uint {
+        return @truncate(c_uint, @ptrToInt(scm) >> 8);
+    }
     pub inline fn Sboolean_value(scm: *SCM) bool {
         return scm != Sfalse;
     }
-    // inline fn Sflonum_value(scm: *SCM) f64 {}
+    inline fn Sflonum_value(scm: *SCM) f64 {
+        return @intToPtr([*]f64, @ptrToInt(scm) + 6)[0];
+    }
     pub extern "c" fn Sinteger_value(*SCM) isize;
     pub inline fn Sunsigned_value(scm: *SCM) usize {
         return @bitCast(usize, Sinteger_value(scm));
@@ -91,22 +100,80 @@ pub const C = struct {
     pub inline fn Sunsigned64_value(scm: *SCM) c_ulong {
         return @bitCast(c_ulong, Sinteger64_value(scm));
     }
-    // pub inline fn Scar(scm: *SCM) *SCM {}
-    // pub inline fn Scdr(scm: *SCM) *SCM {}
+    pub inline fn Scar(scm: *SCM) *SCM {
+        return @intToPtr([*]*SCM, @ptrToInt(scm) + 7)[0];
+    }
+    pub inline fn Scdr(scm: *SCM) *SCM {
+        return @intToPtr([*]*SCM, @ptrToInt(scm) + 15)[0];
+    }
     pub extern "c" fn Ssymbol_to_string(*SCM) *SCM;
-    // pub inline fn Sunbox(scm: *SCM) *SCM {}
-    // pub inline fn Sstring_length(scm: *SCM) isize {}
-    // pub inline fn Svector_length(scm: *SCM) isize {}
-    // pub inline fn Sbytevector_length(scm: *SCM) isize {}
-    // pub inline fn Sfxvector_length(scm: *SCM) isize {}
-    // pub inline fn Sstring_ref(scm: *SCM, index: isize) u8 {}
-    // pub inline fn Svector_ref(scm: *SCM, index: isize) *SCM {}
-    // pub inline fn Sbytevector_u8_ref(scm: *SCM, index: isize) u8 {}
-    // pub inline fn Sfxvector_ref(scm: *SCM, index: isize) *SCM {}
-    // pub inline fn Sbytevector_data(scm: *SCM) [*:0]u8 {}
+    pub inline fn Sunbox(scm: *SCM) *SCM {
+        return @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[0];
+    }
+    pub inline fn Sstring_length(scm: *SCM) isize {
+        return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 4);
+    }
+    pub inline fn Svector_length(scm: *SCM) isize {
+        return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 4);
+    }
+    pub inline fn Sbytevector_length(scm: *SCM) isize {
+        return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 3);
+    }
+    pub inline fn Sfxvector_length(scm: *SCM) isize {
+        return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 4);
+    }
+    pub inline fn Sstring_ref(scm: *SCM, index: isize) c_uint {
+        return @intToPtr([*]c_uint, @ptrToInt(scm) + 9)[@intCast(usize, index)] >> 8;
+    }
+    pub inline fn Svector_ref(scm: *SCM, index: isize) *SCM {
+        return @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)];
+    }
+    pub inline fn Sbytevector_u8_ref(scm: *SCM, index: isize) u8 {
+        return @intToPtr([*]u8, @ptrToInt(scm) + 9)[@intCast(usize, index)];
+    }
+    pub inline fn Sfxvector_ref(scm: *SCM, index: isize) *SCM {
+        return @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)];
+    }
+    pub inline fn Sbytevector_data(scm: *SCM) [*:0]u8 {
+        return @intToPtr([*:0]u8, @ptrToInt(scm) + 9);
+    }
 
     test "accessors" {
-        try std.testing.expect(C.Sboolean_value(C.Strue) == true);
+        try std.testing.expect(C.Sfixnum_value(@ptrCast(*SCM, h.Sfixnum(35).?)) == 35);
+        try std.testing.expect(C.Sboolean_value(@ptrCast(*SCM, h.Strue.?)) == true);
+        try std.testing.expect(@truncate(u8, C.Schar_value(@ptrCast(*SCM, h.Schar('h').?))) == 'h');
+        try std.testing.expect(C.Sflonum_value(@ptrCast(*SCM, h.Sflonum(87.2).?)) == 87.2);
+
+        const cons = @ptrCast(*SCM, h.Scons(h.Strue.?, h.Sfalse.?).?);
+        try std.testing.expect(C.Scar(cons) == @ptrCast(*SCM, h.Strue.?));
+        try std.testing.expect(C.Scdr(cons) == @ptrCast(*SCM, h.Sfalse.?));
+
+        const box = @ptrCast(*SCM, h.Sbox(h.Strue.?).?);
+        try std.testing.expect(C.Sunbox(box) == @ptrCast(*SCM, h.Strue.?));
+
+        const string: []const u8 = "Hello, world!";
+        const scm_string = @ptrCast(*SCM, h.Sstring_of_length(string.ptr, string.len).?);
+        try std.testing.expect(C.Sstring_length(scm_string) == string.len);
+
+        var i: isize = 0;
+        while (@intCast(usize, i) < string.len) : (i += 1) {
+            try std.testing.expect(@truncate(u8, C.Sstring_ref(scm_string, i)) == string[@intCast(usize, i)]);
+        }
+
+        const vector = @ptrCast(*SCM, h.Smake_vector(10, h.Strue.?));
+        try std.testing.expect(C.Svector_length(vector) == 10);
+        try std.testing.expect(C.Svector_ref(vector, 3) == @ptrCast(*SCM, h.Strue.?));
+
+        const bytevector = @ptrCast(*SCM, h.Smake_bytevector(10, 'c'));
+        try std.testing.expect(C.Sbytevector_length(bytevector) == 10);
+        try std.testing.expect(C.Sbytevector_u8_ref(bytevector, 3) == 'c');
+
+        const fxvector = @ptrCast(*SCM, h.Smake_fxvector(10, h.Sfixnum(35).?));
+        try std.testing.expect(C.Sfxvector_length(fxvector) == 10);
+        try std.testing.expect(C.Sfxvector_ref(fxvector, 7) == @ptrCast(*SCM, h.Sfixnum(35).?));
+
+        const bv_data = C.Sbytevector_data(bytevector);
+        try std.testing.expect(std.mem.eql(u8, @as([]const u8, std.mem.sliceTo(bv_data, 0)), "cccccccccc"));
     }
 
     // Mutators
@@ -161,14 +228,14 @@ pub const C = struct {
     pub extern "c" fn Smake_uninitialized_string(isize) *SCM;
 
     test "constructors" {
-        try std.testing.expect(@ptrToInt(scheme_h.Snil.?) == @ptrToInt(C.Snil));
-        try std.testing.expect(@ptrToInt(scheme_h.Strue.?) == @ptrToInt(C.Strue));
-        try std.testing.expect(@ptrToInt(scheme_h.Sfalse.?) == @ptrToInt(C.Sfalse));
-        try std.testing.expect(@ptrToInt(scheme_h.Sbwp_object.?) == @ptrToInt(C.Sbwp_object));
-        try std.testing.expect(@ptrToInt(scheme_h.Seof_object.?) == @ptrToInt(C.Seof_object));
-        try std.testing.expect(@ptrToInt(scheme_h.Svoid.?) == @ptrToInt(C.Svoid));
-        try std.testing.expect(@ptrToInt(scheme_h.Schar('c').?) == @ptrToInt(C.Schar('c')));
-        try std.testing.expect(@ptrToInt(scheme_h.Sfixnum(25).?) == @ptrToInt(C.Sfixnum(25)));
+        try std.testing.expect(@ptrToInt(h.Snil.?) == @ptrToInt(C.Snil));
+        try std.testing.expect(@ptrToInt(h.Strue.?) == @ptrToInt(C.Strue));
+        try std.testing.expect(@ptrToInt(h.Sfalse.?) == @ptrToInt(C.Sfalse));
+        try std.testing.expect(@ptrToInt(h.Sbwp_object.?) == @ptrToInt(C.Sbwp_object));
+        try std.testing.expect(@ptrToInt(h.Seof_object.?) == @ptrToInt(C.Seof_object));
+        try std.testing.expect(@ptrToInt(h.Svoid.?) == @ptrToInt(C.Svoid));
+        try std.testing.expect(@ptrToInt(h.Schar('c').?) == @ptrToInt(C.Schar('c')));
+        try std.testing.expect(@ptrToInt(h.Sfixnum(25).?) == @ptrToInt(C.Sfixnum(25)));
     }
 
     // Windows-specific helper functions
