@@ -379,11 +379,16 @@ pub const C = struct {
 pub const SCM = opaque {};
 
 // untested
-pub inline fn call(len: comptime_int, procedure: *SCM, args: *[len]SCM) *SCM {
+pub inline fn call(comptime len: comptime_int, procedure: *SCM, args: [len]*SCM) *SCM {
     C.Sinitframe(len);
     comptime var i = 0;
     inline while (i < len) : (i += 1) {
         C.Sput_arg(i + 1, args[i]);
     }
-    C.Scall(procedure, len);
+    return C.Scall(procedure, len);
+}
+
+test "zig call implementation" {
+    const result = call(1, C.Stop_level_value(C.Sstring_to_symbol("not")), .{C.Sfalse});
+    try std.testing.expect(result == C.Strue);
 }
