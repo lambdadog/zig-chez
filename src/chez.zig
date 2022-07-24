@@ -23,9 +23,8 @@ test {
     _ = C;
 }
 
-// Works for everything but portable bytecode, but portable bytecode
-// isn't actually in chez yet.
-const native_endian = @import("builtin").target.cpu.arch.endian();
+// This won't work with portable bytecode
+const bit_width = @import("builtin").target.cpu.arch.ptrBitWidth();
 
 pub const C = struct {
     // iptr = isize
@@ -74,9 +73,10 @@ pub const C = struct {
 
     // Accessors
     pub inline fn Sfixnum_value(scm: *SCM) isize {
-        return switch (comptime native_endian) {
-            .Little => @divExact(@bitCast(isize, @ptrToInt(scm)), 8),
-            .Big => @divExact(@bitCast(isize, @ptrToInt(scm)), 4),
+        return switch (comptime bit_width) {
+            64 => @divExact(@bitCast(isize, @ptrToInt(scm)), 8),
+            32 => @divExact(@bitCast(isize, @ptrToInt(scm)), 4),
+            else => unreachable,
         };
     }
     pub inline fn Schar_value(scm: *SCM) c_uint {
@@ -193,9 +193,10 @@ pub const C = struct {
     pub const Seof_object = @intToPtr(*SCM, 0x36);
     pub const Svoid = @intToPtr(*SCM, 0x3E);
     pub inline fn Sfixnum(val: isize) *SCM {
-        return switch (comptime native_endian) {
-            .Little => @intToPtr(*SCM, @bitCast(usize, val * 8)),
-            .Big => @intToPtr(*SCM, @bitCast(usize, val * 4)),
+        return switch (comptime bit_width) {
+            64 => @intToPtr(*SCM, @bitCast(usize, val * 8)),
+            32 => @intToPtr(*SCM, @bitCast(usize, val * 4)),
+            else => unreachable,
         };
     }
     pub inline fn Schar(val: u8) *SCM {
