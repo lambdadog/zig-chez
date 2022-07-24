@@ -1,15 +1,4 @@
 const std = @import("std");
-const ally = std.heap.c_allocator;
-
-// FIXME: will cause import fail errors with running tests for
-// applications/libraries depending on zig-chez
-const h = switch (@import("builtin").is_test) {
-    true => @cImport({
-        @cDefine("SCHEME_STATIC", "1");
-        @cInclude("scheme.h");
-    }),
-    false => {},
-};
 
 test {
     // Initialize scheme kernel
@@ -165,6 +154,14 @@ pub const C = struct {
     }
 
     test "accessors" {
+        const h = switch (@import("builtin").is_test) {
+            true => @cImport({
+                @cDefine("SCHEME_STATIC", "1");
+                @cInclude("scheme.h");
+            }),
+            false => {},
+        };
+
         try std.testing.expect(C.Sfixnum_value(@ptrCast(*SCM, h.Sfixnum(35).?)) == 35);
         try std.testing.expect(C.Sboolean_value(@ptrCast(*SCM, h.Strue.?)) == true);
         try std.testing.expect(@truncate(u8, C.Schar_value(@ptrCast(*SCM, h.Schar('h').?))) == 'h');
@@ -230,6 +227,14 @@ pub const C = struct {
     }
 
     test "mutators" {
+        const h = switch (@import("builtin").is_test) {
+            true => @cImport({
+                @cDefine("SCHEME_STATIC", "1");
+                @cInclude("scheme.h");
+            }),
+            false => {},
+        };
+
         const string: []const u8 = "Hello, vorld!";
         const scm_string = @ptrCast(*SCM, h.Sstring_of_length(string.ptr, string.len).?);
         C.Sstring_set(scm_string, 7, 'w');
@@ -288,6 +293,14 @@ pub const C = struct {
     pub extern "c" fn Smake_uninitialized_string(isize) *SCM;
 
     test "constructors" {
+        const h = switch (@import("builtin").is_test) {
+            true => @cImport({
+                @cDefine("SCHEME_STATIC", "1");
+                @cInclude("scheme.h");
+            }),
+            false => {},
+        };
+
         try std.testing.expect(@ptrToInt(h.Snil.?) == @ptrToInt(C.Snil));
         try std.testing.expect(@ptrToInt(h.Strue.?) == @ptrToInt(C.Strue));
         try std.testing.expect(@ptrToInt(h.Sfalse.?) == @ptrToInt(C.Sfalse));
