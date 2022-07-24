@@ -104,35 +104,59 @@ pub const C = struct {
         return @intToPtr([*]*SCM, @ptrToInt(scm) + 7)[0];
     }
     pub inline fn Scdr(scm: *SCM) *SCM {
-        return @intToPtr([*]*SCM, @ptrToInt(scm) + 15)[0];
+        return switch (comptime bit_width) {
+            64 => @intToPtr([*]*SCM, @ptrToInt(scm) + 15)[0],
+            32 => @intToPtr([*]*SCM, @ptrToInt(scm) + 11)[0],
+            else => unreachable,
+        };
     }
     pub extern "c" fn Ssymbol_to_string(*SCM) *SCM;
     pub inline fn Sunbox(scm: *SCM) *SCM {
-        return @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[0];
+        return switch (comptime bit_width) {
+            64 => @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[0],
+            32 => @intToPtr([*]*SCM, @ptrToInt(scm) + 5)[0],
+            else => unreachable,
+        };
     }
     pub inline fn Sstring_length(scm: *SCM) isize {
         return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 4);
     }
     pub inline fn Svector_length(scm: *SCM) isize {
-        return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 4);
+        return switch (comptime bit_width) {
+            64 => @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 4),
+            32 => @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 3),
+            else => unreachable,
+        };
     }
     pub inline fn Sbytevector_length(scm: *SCM) isize {
         return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 3);
     }
     pub inline fn Sfxvector_length(scm: *SCM) isize {
         return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 4);
-    }
+    } // Schar_value
     pub inline fn Sstring_ref(scm: *SCM, index: isize) c_uint {
-        return @intToPtr([*]c_uint, @ptrToInt(scm) + 9)[@intCast(usize, index)] >> 8;
+        return switch (comptime bit_width) {
+            64 => @intToPtr([*]c_uint, @ptrToInt(scm) + 9)[@intCast(usize, index)] >> 8,
+            32 => @intToPtr([*]c_uint, @ptrToInt(scm) + 5)[@intCast(usize, index)] >> 8,
+            else => unreachable,
+        };
     }
     pub inline fn Svector_ref(scm: *SCM, index: isize) *SCM {
-        return @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)];
+        return switch (comptime bit_width) {
+            64 => @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)],
+            32 => @intToPtr([*]*SCM, @ptrToInt(scm) + 5)[@intCast(usize, index)],
+            else => unreachable,
+        };
     }
     pub inline fn Sbytevector_u8_ref(scm: *SCM, index: isize) u8 {
         return @intToPtr([*]u8, @ptrToInt(scm) + 9)[@intCast(usize, index)];
     }
     pub inline fn Sfxvector_ref(scm: *SCM, index: isize) *SCM {
-        return @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)];
+        return switch (comptime bit_width) {
+            64 => @intToPtr([*]*SCM, @ptrToInt(scm) + 9)[@intCast(usize, index)],
+            32 => @intToPtr([*]*SCM, @ptrToInt(scm) + 5)[@intCast(usize, index)],
+            else => unreachable,
+        };
     }
     pub inline fn Sbytevector_data(scm: *SCM) [*:0]u8 {
         return @intToPtr([*:0]u8, @ptrToInt(scm) + 9);
