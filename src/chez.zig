@@ -38,29 +38,128 @@ pub const C = struct {
     pub extern "c" fn Sscheme_deinit() void;
 
     // Predicates
-    // pub inline fn Sfixnump(scm: *SCM) bool {}
-    // pub inline fn Scharp(scm: *SCM) bool {}
-    // pub inline fn Snullp(scm: *SCM) bool {}
-    // pub inline fn Seof_objectp(scm: *SCM) bool {}
-    // pub inline fn Sbwp_objectp(scm: *SCM) bool {}
-    // pub inline fn Sbooleanp(scm: *SCM) bool {}
-    // pub inline fn Spairp(scm: *SCM) bool {}
-    // pub inline fn Ssymbolp(scm: *SCM) bool {}
-    // pub inline fn Sprocedurep(scm: *SCM) bool {}
-    // pub inline fn Sflonump(scm: *SCM) bool {}
-    // pub inline fn Svectorp(scm: *SCM) bool {}
-    // pub inline fn Sbytevectorp(scm: *SCM) bool {}
-    // pub inline fn Sfxvectorp(scm: *SCM) bool {}
-    // pub inline fn Sstringp(scm: *SCM) bool {}
-    // pub inline fn Sbignump(scm: *SCM) bool {}
-    // pub inline fn Sboxp(scm: *SCM) bool {}
-    // pub inline fn Sinexactnump(scm: *SCM) bool {}
-    // pub inline fn Sp(scm: *SCM) bool {}
-    // pub inline fn Sxactnump(scm: *SCM) bool {}
-    // pub inline fn Sratnump(scm: *SCM) bool {}
-    // pub inline fn Sinputportp(scm: *SCM) bool {}
-    // pub inline fn Soutputportp(scm: *SCM) bool {}
-    // pub inline fn Srecordp(scm: *SCM) bool {}
+    pub inline fn Sfixnump(scm: *SCM) bool {
+        return switch (comptime bit_width) {
+            64 => @ptrToInt(scm) & 0x7 == 0x0,
+            32 => @ptrToInt(scm) & 0x3 == 0x0,
+            else => unreachable,
+        };
+    }
+    pub inline fn Scharp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0xFF == 0x16;
+    }
+    pub inline fn Snullp(scm: *SCM) bool {
+        return @ptrToInt(scm) == 0x26;
+    }
+    pub inline fn Seof_objectp(scm: *SCM) bool {
+        return @ptrToInt(scm) == 0x36;
+    }
+    pub inline fn Sbwp_objectp(scm: *SCM) bool {
+        return @ptrToInt(scm) == 0x4E;
+    }
+    pub inline fn Sbooleanp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0xF7 == 0x6;
+    }
+    pub inline fn Spairp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x1;
+    }
+    pub inline fn Ssymbolp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x3;
+    }
+    pub inline fn Sprocedurep(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x5;
+    }
+    pub inline fn Sflonump(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x2;
+    }
+    pub inline fn Svectorp(scm: *SCM) bool {
+        return switch (comptime bit_width) {
+            64 => @ptrToInt(scm) & 0x7 == 0x7 and
+                @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x7 == 0x0,
+            32 => @ptrToInt(scm) & 0x7 == 0x7 and
+                @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x3 == 0x0,
+            else => unreachable,
+        };
+    }
+    // rest of predicates untested for now
+    pub inline fn Sbytevectorp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x7 == 0x3;
+    }
+    pub inline fn Sfxvectorp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x3 == 0x1;
+    }
+    pub inline fn Sstringp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x7 == 0x2;
+    }
+    pub inline fn Sbignump(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x1F == 0x6;
+    }
+    pub inline fn Sboxp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x7F == 0xE;
+    }
+    pub inline fn Sinexactnump(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) == 0x36;
+    }
+    pub inline fn Sexactnump(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) == 0x56;
+    }
+    pub inline fn Sratnump(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) == 0x16;
+    }
+    pub inline fn Sinputportp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x1FF == 0x11E;
+    }
+    pub inline fn Soutputportp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x2FF == 0x21E;
+    }
+    pub inline fn Srecordp(scm: *SCM) bool {
+        return @ptrToInt(scm) & 0x7 == 0x7 and
+            @ptrToInt(@intToPtr(*SCM, @ptrToInt(scm) + 1)) & 0x7 == 0x7;
+    }
+
+    test "predicates" {
+        const h = @cImport({
+            @cDefine("SCHEME_STATIC", "1");
+            @cInclude("scheme.h");
+        });
+
+        // More extensive testing than one arbitrarytrue and one false
+        // case might be nice, but :\
+        try std.testing.expect(C.Sfixnump(@ptrCast(*SCM, h.Sfixnum(32))) == true);
+        try std.testing.expect(C.Sfixnump(@ptrCast(*SCM, h.Sflonum(32.3))) == false);
+        try std.testing.expect(C.Scharp(@ptrCast(*SCM, h.Schar('c'))) == true);
+        try std.testing.expect(C.Scharp(@ptrCast(*SCM, h.Sflonum(32.3))) == false);
+        try std.testing.expect(C.Snullp(@ptrCast(*SCM, h.Snil)) == true);
+        try std.testing.expect(C.Snullp(@ptrCast(*SCM, h.Svoid)) == false);
+        try std.testing.expect(C.Seof_objectp(@ptrCast(*SCM, h.Seof_object)) == true);
+        try std.testing.expect(C.Seof_objectp(@ptrCast(*SCM, h.Sbwp_object)) == false);
+        try std.testing.expect(C.Sbwp_objectp(@ptrCast(*SCM, h.Sbwp_object)) == true);
+        try std.testing.expect(C.Sbwp_objectp(@ptrCast(*SCM, h.Seof_object)) == false);
+        try std.testing.expect(C.Sbooleanp(@ptrCast(*SCM, h.Strue)) == true);
+        try std.testing.expect(C.Sbooleanp(@ptrCast(*SCM, h.Schar('a'))) == false);
+        try std.testing.expect(C.Spairp(@ptrCast(*SCM, h.Scons(h.Strue, h.Sfalse))) == true);
+        try std.testing.expect(C.Spairp(@ptrCast(*SCM, h.Strue)) == false);
+        const read_sym = C.Sstring_to_symbol("read");
+        try std.testing.expect(C.Ssymbolp(read_sym) == true);
+        try std.testing.expect(C.Ssymbolp(@ptrCast(*SCM, h.Schar('z'))) == false);
+        const read_proc = C.Stop_level_value(read_sym);
+        try std.testing.expect(C.Sprocedurep(read_proc) == true);
+        try std.testing.expect(C.Sprocedurep(read_sym) == false);
+        try std.testing.expect(C.Sflonump(@ptrCast(*SCM, h.Sflonum(1.234))) == true);
+        try std.testing.expect(C.Sflonump(@ptrCast(*SCM, h.Schar('"'))) == false);
+        try std.testing.expect(C.Svectorp(@ptrCast(*SCM, h.Smake_vector(3, h.Strue))) == true);
+        try std.testing.expect(C.Svectorp(@ptrCast(*SCM, h.Schar('"'))) == false);
+    }
 
     // Accessors
     pub inline fn Sfixnum_value(scm: *SCM) isize {
@@ -124,7 +223,7 @@ pub const C = struct {
     }
     pub inline fn Sfxvector_length(scm: *SCM) isize {
         return @bitCast(isize, @ptrToInt(@intToPtr([*]*SCM, @ptrToInt(scm) + 1)[0]) >> 4);
-    } // Schar_value
+    }
     pub inline fn Sstring_ref(scm: *SCM, index: isize) c_uint {
         return switch (comptime bit_width) {
             64 => @intToPtr([*]c_uint, @ptrToInt(scm) + 9)[@intCast(usize, index)] >> 8,
