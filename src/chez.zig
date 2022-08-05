@@ -12,6 +12,7 @@ test {
     C.Sbuild_heap("test", null);
 
     _ = C;
+    _ = SCM;
 }
 
 // This won't work with portable bytecode
@@ -279,6 +280,8 @@ pub const C = struct {
         while (@intCast(usize, i) < string.len) : (i += 1) {
             try std.testing.expect(@truncate(u8, C.Sstring_ref(scm_string, i)) == string[@intCast(usize, i)]);
         }
+        // null termination check
+        try std.testing.expect(@truncate(u8, C.Sstring_ref(scm_string, string.len)) == 0);
 
         const vector = @ptrCast(*SCM, h.Smake_vector(10, h.Strue.?));
         try std.testing.expect(C.Svector_length(vector) == 10);
@@ -485,9 +488,20 @@ pub const C = struct {
     pub extern "c" fn Sregister_heap_file([*]const u8) void;
 };
 
+// bit width != register width *necessarily*, but it's accurate for
+// modern desktop CPUs 99/100 times, so I'm okay with it for now.
+pub const fixnum = @Type(std.builtin.Type{
+    .Int = .{
+        .signedness = .signed,
+        // https://man.scheme.org/fixnum-width.3scheme
+        .bits = bit_width - std.math.log2(bit_width / 8),
+    },
+});
+
 pub const SCM = opaque {
     pub const Error = error{
         NotAProcedure,
+        Opaque,
     };
 
     pub const Type = enum {
@@ -501,10 +515,10 @@ pub const SCM = opaque {
         Symbol,
         Procedure,
         Flonum,
-        Vector,
-        Bytevector,
-        Bytevector,
         String,
+        Vector,
+        Fixvector,
+        Bytevector,
         Bignum,
         Box,
         InexactNumber,
@@ -515,18 +529,58 @@ pub const SCM = opaque {
         Record,
     };
 
+    // We don't have access to the values of a number of these types
+    // without depending on Chez internals so they're just void.
+    pub const Value = union(enum) {
+        Fixnum: fixnum,
+        Char: u8,
+        Nil: void,
+        EOF: void,
+        BWP: void,
+        Boolean: bool,
+        Cons: Cons,
+        Symbol: Symbol,
+        Procedure: void,
+        Flonum: f64,
+        String: []const u8,
+        Vector: []*SCM,
+        Fixvector: []const fixnum,
+        Bytevector: []const u8,
+        Bignum: void,
+        Box: Box,
+        InexactNumber: void,
+        ExactNumber: void,
+        RationalNumber: void,
+        InputPort: void,
+        OutputPort: void,
+        Record: void,
+
+        pub const Cons = struct {
+            car: *SCM,
+            cdr: *SCM,
+        };
+
+        pub const Symbol = struct {
+            name: []const u8,
+        };
+
+        pub const Box = struct {
+            value: *SCM,
+        };
+    };
+
     pub inline fn call(
         self: *SCM,
         comptime len: comptime_int,
         args: [len]*SCM,
-    ) SCM.Error!*SCM {
-        if (C.Sprocedurep(procedure)) {
+    ) SCM.Error.NotAProcedure!*SCM {
+        if (C.Sprocedurep(self)) {
             C.Sinitframe(len);
             comptime var i = 0;
             inline while (i < len) : (i += 1) {
                 C.Sput_arg(i + 1, args[i]);
             }
-            return C.Scall(procedure, len);
+            return C.Scall(self, len);
         } else return SCM.Error.NotAProcedure;
     }
 
@@ -556,15 +610,98 @@ pub const SCM = opaque {
             .Record => C.Srecordp(self),
         };
     }
+
+    pub fn as(self: *SCM, scm_type: SCM.Type, ally: std.mem.Allocator) SCM.Error.Opaque!SCM.Value {
+        return switch (scm_type) {
+            .Fixnum => SCM.Value{
+                .Fixnum = @truncate(fixnum, C.Sfixnum_value(self)),
+            },
+            .Char => SCM.Value{
+                .Char = @truncate(u8, C.Schar_value(self)),
+            },
+            .Boolean => SCM.Value{
+                .Boolean = C.Sboolean_value(self),
+            },
+            .Flonum => SCM.Value{
+                .Flonum = C.Sflonum_value(self),
+            },
+            // ??
+            // Sinteger_value, Sinteger32_value, Sinteger64_value
+            .Cons => SCM.Value{
+                .Cons = .{
+                    .car = C.Scar(self),
+                    .cdr = C.Scdr(self),
+                },
+            },
+            .Symbol => SCM.Value{
+                .Symbol = .{
+                    .name = try self.as(.String).String,
+                },
+            },
+            .String => SCM.Value{
+                .String = blk: {
+                    var result = std.ArrayList(u8).init(ally);
+                    var i: isize = 0;
+                    while (i < C.Sstring_length(self)) : (i += 1) {
+                        try result.append(@truncate(u8, C.Sstring_ref(self, i)));
+                    }
+                    break :blk result.toOwnedSlice();
+                },
+            },
+            .Vector => SCM.Value{
+                .Vector = blk: {
+                    var result = std.ArrayList(*SCM).init(ally);
+                    var i: isize = 0;
+                    while (i < C.Svector_length(self)) : (i += 1) {
+                        try result.append(C.Svector_ref(self, i));
+                    }
+                    break :blk result.toOwnedSlice();
+                },
+            },
+            .Bytevector => SCM.Value{
+                .Bytevector = std.mem.sliceTo(C.Sbytevector_data(self), 0),
+            },
+            .Fixvector => SCM.Value{
+                .Fixvector = blk: {
+                    var result = std.ArrayList(fixnum).init(ally);
+                    var i: isize = 0;
+                    while (i < C.Sfxvector_length(self)) : (i += 1) {
+                        try result.append(C.Sfixnum_value(C.Sfxvector_ref(self, i)));
+                    }
+                    break :blk result.toOwnedSlice();
+                },
+            },
+            .Box => SCM.Value{
+                .Box = .{
+                    .value = C.Sunbox(self),
+                },
+            },
+            // Singletons
+            .Nil, .EOF, .BWP => scm_type,
+            else => SCM.Error.Opaque,
+        };
+    }
+
+    pub fn value(self: *SCM, ally: std.mem.Allocator) SCM.Value {
+        // This could be done more efficiently by not repeating
+        // bitcasts, etc, but I'd like to refactor the C internals
+        // first before addressing that.
+        var i = 0;
+        return blk: while (i < @typeInfo(SCM.Type)) : (i += 1) {
+            const scm_type = @intToEnum(SCM.Type, i);
+            if (self.is(scm_type))
+                break :blk self.as(scm_type, ally) catch scm_type;
+        };
+    }
 };
 
 pub inline fn call(
     comptime len: comptime_int,
     procedure_name: []const u8,
     args: [len]*SCM,
-) SCM.Error!*SCM {
-    const procedure = C.Stop_level_value(C.string_to_symbol(procedure_name));
-    try procedure.call(len, args);
+) SCM.Error.NotAProcedure!*SCM {
+    const procedure = C.Stop_level_value(C.Sstring_to_symbol(procedure_name.ptr));
+    return try procedure.call(len, args);
 }
 
 test "call()" {
