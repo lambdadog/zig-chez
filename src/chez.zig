@@ -38,6 +38,7 @@ pub const C = struct {
     pub extern "c" fn Sscheme_deinit() void;
 
     // Predicates
+    // TODO: factor out some bits: 0x7 seems to be "magic" in some way
     pub inline fn Sfixnump(scm: *SCM) bool {
         return switch (comptime bit_width) {
             64 => @ptrToInt(scm) & 0x7 == 0x0,
@@ -253,13 +254,10 @@ pub const C = struct {
     }
 
     test "accessors" {
-        const h = switch (@import("builtin").is_test) {
-            true => @cImport({
-                @cDefine("SCHEME_STATIC", "1");
-                @cInclude("scheme.h");
-            }),
-            false => {},
-        };
+        const h = @cImport({
+            @cDefine("SCHEME_STATIC", "1");
+            @cInclude("scheme.h");
+        });
 
         try std.testing.expect(C.Sfixnum_value(@ptrCast(*SCM, h.Sfixnum(35).?)) == 35);
         try std.testing.expect(C.Sboolean_value(@ptrCast(*SCM, h.Strue.?)) == true);
@@ -326,13 +324,10 @@ pub const C = struct {
     }
 
     test "mutators" {
-        const h = switch (@import("builtin").is_test) {
-            true => @cImport({
-                @cDefine("SCHEME_STATIC", "1");
-                @cInclude("scheme.h");
-            }),
-            false => {},
-        };
+        const h = @cImport({
+            @cDefine("SCHEME_STATIC", "1");
+            @cInclude("scheme.h");
+        });
 
         const string: []const u8 = "Hello, vorld!";
         const scm_string = @ptrCast(*SCM, h.Sstring_of_length(string.ptr, string.len).?);
@@ -392,13 +387,10 @@ pub const C = struct {
     pub extern "c" fn Smake_uninitialized_string(isize) *SCM;
 
     test "constructors" {
-        const h = switch (@import("builtin").is_test) {
-            true => @cImport({
-                @cDefine("SCHEME_STATIC", "1");
-                @cInclude("scheme.h");
-            }),
-            false => {},
-        };
+        const h = @cImport({
+            @cDefine("SCHEME_STATIC", "1");
+            @cInclude("scheme.h");
+        });
 
         try std.testing.expect(@ptrToInt(h.Snil.?) == @ptrToInt(C.Snil));
         try std.testing.expect(@ptrToInt(h.Strue.?) == @ptrToInt(C.Strue));
