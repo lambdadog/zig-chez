@@ -403,7 +403,7 @@ pub const C = struct {
     }
 
     // Windows-specific helper functions
-    // I have no intention of implementing these
+    // I have no intention of implementing these for now
 
     // Accessing top-level values
     pub extern "c" fn Stop_level_value(*SCM) *SCM;
@@ -466,6 +466,9 @@ pub const C = struct {
     pub extern "c" fn Sdestroy_thread() bool;
 
     // Low-level synchronization primitives
+    //
+    // I'll need to implement these with ASM so I'm being lazy about
+    // them...
     // pub usingnamespace switch (chez_threaded) {
     //   true => struct {
     //     pub inline fn INITLOCK(addr: *anyopaque) void {}
@@ -482,18 +485,89 @@ pub const C = struct {
     pub extern "c" fn Sregister_heap_file([*]const u8) void;
 };
 
-pub const SCM = opaque {};
+pub const SCM = opaque {
+    pub const Error = error{
+        NotAProcedure,
+    };
 
-pub inline fn call(comptime len: comptime_int, procedure: *SCM, args: [len]*SCM) *SCM {
-    C.Sinitframe(len);
-    comptime var i = 0;
-    inline while (i < len) : (i += 1) {
-        C.Sput_arg(i + 1, args[i]);
+    pub const Type = enum {
+        Fixnum,
+        Char,
+        Nil,
+        EOF,
+        BWP,
+        Boolean,
+        Cons,
+        Symbol,
+        Procedure,
+        Flonum,
+        Vector,
+        Bytevector,
+        Bytevector,
+        String,
+        Bignum,
+        Box,
+        InexactNumber,
+        ExactNumber,
+        RationalNumber,
+        InputPort,
+        OutputPort,
+        Record,
+    };
+
+    pub inline fn call(
+        self: *SCM,
+        comptime len: comptime_int,
+        args: [len]*SCM,
+    ) SCM.Error!*SCM {
+        if (C.Sprocedurep(procedure)) {
+            C.Sinitframe(len);
+            comptime var i = 0;
+            inline while (i < len) : (i += 1) {
+                C.Sput_arg(i + 1, args[i]);
+            }
+            return C.Scall(procedure, len);
+        } else return SCM.Error.NotAProcedure;
     }
-    return C.Scall(procedure, len);
+
+    pub fn is(self: *SCM, scm_type: SCM.Type) bool {
+        return switch (scm_type) {
+            .Fixnum => C.Sfixnump(self),
+            .Char => C.Scharp(self),
+            .Nil => C.Snullp(self),
+            .EOF => C.Seof_objectp(self),
+            .BWP => C.Sbwp_objectp(self),
+            .Boolean => C.Sbooleanp(self),
+            .Cons => C.Spairp(self),
+            .Symbol => C.Ssymbolp(self),
+            .Procedure => C.Sprocedurep(self),
+            .Flonum => C.Sflonump(self),
+            .Vector => C.Svectorp(self),
+            .Fixvector => C.Sfxvectorp(self),
+            .Bytevector => C.Sbytevectorp(self),
+            .String => C.Sstringp(self),
+            .Bignum => C.Sbignump(self),
+            .Box => C.Sboxp(self),
+            .InexactNumber => C.Sinexactnump(self),
+            .ExactNumber => C.Sexactnump(self),
+            .RationalNumber => C.Sratnump(self),
+            .InputPort => C.Sinputportp(self),
+            .OutputPort => C.Soutputportp(self),
+            .Record => C.Srecordp(self),
+        };
+    }
+};
+
+pub inline fn call(
+    comptime len: comptime_int,
+    procedure_name: []const u8,
+    args: [len]*SCM,
+) SCM.Error!*SCM {
+    const procedure = C.Stop_level_value(C.string_to_symbol(procedure_name));
+    try procedure.call(len, args);
 }
 
 test "call()" {
-    const result = call(1, C.Stop_level_value(C.Sstring_to_symbol("not")), .{C.Sfalse});
+    const result = try call(1, "not", .{C.Sfalse});
     try std.testing.expect(result == C.Strue);
 }
