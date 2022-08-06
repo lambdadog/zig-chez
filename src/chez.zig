@@ -535,6 +535,7 @@ pub const SCM = opaque {
         Fixnum: fixnum,
         Char: u8,
         Nil: void,
+        Void: void,
         EOF: void,
         BWP: void,
         Boolean: bool,
@@ -573,7 +574,7 @@ pub const SCM = opaque {
         self: *SCM,
         comptime len: comptime_int,
         args: [len]*SCM,
-    ) SCM.Error.NotAProcedure!*SCM {
+    ) SCM.Error!*SCM {
         if (C.Sprocedurep(self)) {
             C.Sinitframe(len);
             comptime var i = 0;
@@ -589,6 +590,7 @@ pub const SCM = opaque {
             .Fixnum => C.Sfixnump(self),
             .Char => C.Scharp(self),
             .Nil => C.Snullp(self),
+            .Void => @ptrToInt(self) == 0x3E,
             .EOF => C.Seof_objectp(self),
             .BWP => C.Sbwp_objectp(self),
             .Boolean => C.Sbooleanp(self),
@@ -611,7 +613,7 @@ pub const SCM = opaque {
         };
     }
 
-    pub fn as(self: *SCM, scm_type: SCM.Type, ally: std.mem.Allocator) SCM.Error.Opaque!SCM.Value {
+    pub fn as(self: *SCM, scm_type: SCM.Type, ally: std.mem.Allocator) SCM.Error!SCM.Value {
         return switch (scm_type) {
             .Fixnum => SCM.Value{
                 .Fixnum = @truncate(fixnum, C.Sfixnum_value(self)),
@@ -625,8 +627,6 @@ pub const SCM = opaque {
             .Flonum => SCM.Value{
                 .Flonum = C.Sflonum_value(self),
             },
-            // ??
-            // Sinteger_value, Sinteger32_value, Sinteger64_value
             .Cons => SCM.Value{
                 .Cons = .{
                     .car = C.Scar(self),
@@ -677,7 +677,9 @@ pub const SCM = opaque {
                 },
             },
             // Singletons
-            .Nil, .EOF, .BWP => scm_type,
+            .Nil, .Void, .EOF, .BWP => scm_type,
+            // Sinteger_value, Sinteger32_value, Sinteger64_value
+            // Sunsigned_value, Sunsigned32_value, Sunsigned64_value
             else => SCM.Error.Opaque,
         };
     }
@@ -693,13 +695,57 @@ pub const SCM = opaque {
                 break :blk self.as(scm_type, ally) catch scm_type;
         };
     }
+
+    pub fn from(scm_value: SCM.Value) SCM.Error!*SCM {
+        return switch (scm_value) {
+            .Fixnum => |v| C.Sfixnum(v),
+            .Char => |v| C.Schar(v),
+            .Nil => C.Snil,
+            .Void => C.Svoid,
+            .EOF => C.Seof_object,
+            .BWP => C.Sbwp_object,
+            .Boolean => |v| C.Sboolean(v),
+            .Cons => |cell| C.Scons(cell.car, cell.cdr),
+            .Symbol => |s| C.Sstring_to_symbol(s.name),
+            .Flonum => |v| C.Sflonum(v),
+            .String => |v| C.Sstring_of_length(v.ptr, v.len),
+            .Vector => |vec| blk: {
+                var scm_vector = C.Smake_vector(vec.len, C.Snil);
+                var i: usize = 0;
+                while (i < vec.len) : (i += 1) {
+                    C.Svector_set(scm_vector, @truncate(isize, i), vec[i]);
+                }
+                break :blk scm_vector;
+            },
+            .Fixvector => |fxvec| blk: {
+                var scm_fxvector = C.Smake_fxvector(fxvec.len, 0);
+                var i: usize = 0;
+                while (i < fxvec.len) : (i += 1) {
+                    C.Svector_set(scm_fxvector, @truncate(isize, i), fxvec[i]);
+                }
+                break :blk scm_fxvector;
+            },
+            .Bytevector => |bvec| blk: {
+                var scm_bytevector = C.Smake_bytevector(bvec.len, 0);
+                var i: usize = 0;
+                while (i < bvec.len) : (i += 1) {
+                    C.Sbytevector_u8_set(scm_bytevector, @truncate(isize, i), bvec[i]);
+                }
+                break :blk scm_bytevector;
+            },
+            .Box => |v| C.Sbox(v),
+            // Sinteger, Sinteger32, Sinteger64
+            // Sunsigned, Sunsigned32, Sunsigned64
+            else => SCM.Error.Opaque,
+        };
+    }
 };
 
 pub inline fn call(
     comptime len: comptime_int,
     procedure_name: []const u8,
     args: [len]*SCM,
-) SCM.Error.NotAProcedure!*SCM {
+) SCM.Error!*SCM {
     const procedure = C.Stop_level_value(C.Sstring_to_symbol(procedure_name.ptr));
     return try procedure.call(len, args);
 }
